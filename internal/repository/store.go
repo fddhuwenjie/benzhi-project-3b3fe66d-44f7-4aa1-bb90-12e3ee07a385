@@ -21,9 +21,10 @@ type Store struct {
 }
 
 type Replay struct {
-	Status int
-	Body   []byte
-	Found  bool
+	Status      int
+	Body        []byte
+	Found       bool
+	Fingerprint string
 }
 
 type DossierFilter struct {
@@ -317,6 +318,9 @@ func (s *Store) Replay(ctx context.Context, requestID, fingerprint string) (Repl
 	cached, ok := s.replayCache[requestID]
 	s.replayMu.RUnlock()
 	if ok {
+		if cached.Fingerprint != fingerprint {
+			return Replay{}, domain.Invalid("request_id", "已被不同请求使用")
+		}
 		return cached, nil
 	}
 	var stored string
@@ -332,7 +336,7 @@ func (s *Store) Replay(ctx context.Context, requestID, fingerprint string) (Repl
 	if stored != fingerprint {
 		return Replay{}, domain.Invalid("request_id", "已被不同请求使用")
 	}
-	replay := Replay{Status: status, Body: body, Found: true}
+	replay := Replay{Status: status, Body: body, Found: true, Fingerprint: stored}
 	s.replayMu.Lock()
 	s.replayCache[requestID] = replay
 	s.replayMu.Unlock()
