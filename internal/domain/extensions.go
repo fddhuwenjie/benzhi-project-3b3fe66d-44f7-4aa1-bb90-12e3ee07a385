@@ -346,6 +346,17 @@ func (d *InterviewDossier) ResolveIssues(items []RedactionResolution, now time.T
 	if len(errs) > 0 {
 		return ValidationErrors{Items: errs}
 	}
+	// Re-verify that the proposed replacement text does not reintroduce a
+	// blocker hit (another direct identifier or an unauthorized use marker)
+	// into the candidate content. Build the redacted text per segment using the
+	// proposed resolutions and the already-resolved issues, then scan it with
+	// the same blocker rules as the eligibility checker. This runs before any
+	// mutations so the rejection stays atomic and the dossier remains in
+	// remediation.
+	errs = append(errs, d.scanProposedResolutions(items)...)
+	if len(errs) > 0 {
+		return ValidationErrors{Items: errs}
+	}
 	for _, item := range items {
 		issue := d.issue(item.IssueID)
 		seg := d.segment(issue.SegmentID)
@@ -375,4 +386,48 @@ func (d *InterviewDossier) issue(id string) *RedactionIssue {
 		}
 	}
 	return nil
+}
+
+// scanProposedResolutions rebuilds each affected segment's redacted text using
+// the proposed resolutions together with any already-resolved issues, then
+// re-scans the result for blocker-level rule hits. It mirrors the candidate
+// text assembly so that a replacement text which itself reintroduces a direct
+// identifier or an unauthorized use marker is caught before the dossier is
+// allowed to leave remediation.
+func (d *InterviewDossier) scanProposedResolutions(items []RedactionResolution) []LocatedError {
+	proposed := map[string]string{}
+	for _, item := range items {
+		issue := d.issue(item.IssueID)
+		if issue == nil {
+			continue
+		}
+		proposed[issue.IssueID] = item.ReplacementText
+	}
+	errs := []LocatedError{}
+	for _, segment := range d.Segments {
+		runes := []rune(segment.Text)
+		fixes := []RedactionIssue{}
+		for _, issue := range d.Issues {
+			if issue.SegmentID != segment.SegmentID {
+				continue
+			}
+			if issue.Status == IssueResolved {
+				fixes = append(fixes, issue)
+			}
+			if issue.Status == IssueOpen {
+				if replacement, ok := proposed[issue.IssueID]; ok {
+					fixes = append(fixes, RedactionIssue{IssueID: issue.IssueID, SegmentID: issue.SegmentID, StartOffset: issue.StartOffset, EndOffset: issue.EndOffset, ReplacementText: replacement, Status: IssueResolved})
+				}
+			}
+		}
+		sort.Slice(fixes, func(i, j int) bool { return fixes[i].StartOffset > fixes[j].StartOffset })
+		for _, fix := range fixes {
+			if fix.StartOffset < 0 || fix.EndOffset > len(runes) || fix.EndOffset <= fix.StartOffset {
+				continue
+			}
+			runes = append(append(append([]rune(nil), runes[:fix.StartOffset]...), []rune(fix.ReplacementText)...), runes[fix.EndOffset:]...)
+		}
+		errs = append(errs, ScanBlockers(string(runes), segment.SegmentID, d.AllowedUses)...)
+	}
+	return errs
 }

@@ -2,9 +2,11 @@ package domain
 
 import (
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 func (d *InterviewDossier) SetIssues(issues []RedactionIssue, now time.Time) error {
@@ -83,4 +85,35 @@ func (d *InterviewDossier) CandidateText() (string, error) {
 		lines = append(lines, segment.SpeakerCode+": "+string(runes))
 	}
 	return strings.Join(lines, "\n"), nil
+}
+
+// directIdentifierPattern matches phone numbers, Chinese ID card numbers,
+// and email addresses the same way the eligibility checker does.
+var directIdentifierPattern = regexp.MustCompile(`(?:1[3-9][0-9]{9}|[0-9]{17}[0-9Xx]|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})`)
+
+// useMarkerPattern matches inline use annotations like "[用途:research]".
+var useMarkerPattern = regexp.MustCompile(`\[用途:([^\]]+)\]`)
+
+// ScanBlockers inspects the given text for blocker-level rule hits
+// (direct identifiers and unauthorized use markers) using the same rules as
+// the eligibility checker. It returns one LocatedError per hit, including the
+// segment id and rune offsets when provided.
+func ScanBlockers(text, segmentID string, allowedUses []string) []LocatedError {
+	errs := []LocatedError{}
+	for _, match := range directIdentifierPattern.FindAllStringIndex(text, -1) {
+		start := utf8.RuneCountInString(text[:match[0]])
+		errs = append(errs, LocatedError{Field: "replacement_text", Code: "blocker", Message: "替换文本再次命中阻断规则 DIRECT_IDENTIFIER", SegmentID: segmentID, Index: start})
+	}
+	allowed := map[string]bool{}
+	for _, use := range allowedUses {
+		allowed[use] = true
+	}
+	for _, match := range useMarkerPattern.FindAllStringSubmatchIndex(text, -1) {
+		use := text[match[2]:match[3]]
+		if !allowed[use] {
+			start := utf8.RuneCountInString(text[:match[0]])
+			errs = append(errs, LocatedError{Field: "replacement_text", Code: "blocker", Message: "替换文本再次命中阻断规则 UNAUTHORIZED_USE", SegmentID: segmentID, Index: start})
+		}
+	}
+	return errs
 }
