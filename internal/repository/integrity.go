@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"oralarchive/internal/domain"
+	"time"
 )
 
 func (s *Store) verifyAuditRows(ctx context.Context, dossierID string, expected []domain.AuditEvent) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT sequence,action,actor_id,previous_sha256,sha256 FROM audit_events WHERE dossier_id=? ORDER BY sequence`, dossierID)
+	rows, err := s.db.QueryContext(ctx, `SELECT sequence,action,actor_id,occurred_at,previous_sha256,sha256 FROM audit_events WHERE dossier_id=? ORDER BY sequence`, dossierID)
 	if err != nil {
 		return err
 	}
@@ -16,8 +17,8 @@ func (s *Store) verifyAuditRows(ctx context.Context, dossierID string, expected 
 	previous := ""
 	for rows.Next() {
 		var sequence int
-		var action, actor, storedPrevious, digest string
-		if err := rows.Scan(&sequence, &action, &actor, &storedPrevious, &digest); err != nil {
+		var action, actor, occurredAt, storedPrevious, digest string
+		if err := rows.Scan(&sequence, &action, &actor, &occurredAt, &storedPrevious, &digest); err != nil {
 			return err
 		}
 		if sequence != index+1 {
@@ -30,7 +31,8 @@ func (s *Store) verifyAuditRows(ctx context.Context, dossierID string, expected 
 			return fmt.Errorf("审计表存在额外事件: %d", sequence)
 		}
 		event := expected[index]
-		if event.Sequence != sequence || event.Action != action || event.ActorID != actor || event.PreviousSHA256 != storedPrevious || event.SHA256 != digest {
+		expectedOccurredAt := event.At.UTC().Format(time.RFC3339Nano)
+		if event.Sequence != sequence || event.Action != action || event.ActorID != actor || event.PreviousSHA256 != storedPrevious || event.SHA256 != digest || expectedOccurredAt != occurredAt {
 			return fmt.Errorf("审计表与聚合不一致: %d", sequence)
 		}
 		previous = digest
