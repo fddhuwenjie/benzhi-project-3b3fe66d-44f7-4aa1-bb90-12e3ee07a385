@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"oralarchive/internal/domain"
@@ -14,19 +13,16 @@ import (
 )
 
 type Service struct {
-	store               *repository.Store
-	locks               *dossierLocks
-	now                 func() time.Time
-	verificationMu      sync.RWMutex
-	verificationResults map[string]release.VerificationReport
+	store *repository.Store
+	locks *dossierLocks
+	now   func() time.Time
 }
 
 func New(store *repository.Store) *Service {
 	return &Service{
-		store:               store,
-		locks:               newDossierLocks(),
-		now:                 time.Now,
-		verificationResults: map[string]release.VerificationReport{},
+		store: store,
+		locks: newDossierLocks(),
+		now:   time.Now,
 	}
 }
 
