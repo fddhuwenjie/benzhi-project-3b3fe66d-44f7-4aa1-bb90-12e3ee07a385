@@ -73,6 +73,9 @@ func (s *Service) Create(ctx context.Context, meta Metadata, in domain.CreateDos
 	if err := validateMeta(meta, false); err != nil {
 		return Result{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	now := s.now()
 	d, err := domain.NewDossier(in, now)
 	if err != nil {
@@ -81,6 +84,9 @@ func (s *Service) Create(ctx context.Context, meta Metadata, in domain.CreateDos
 	d.AppendAudit("dossier_created", in.EditorID, now)
 	res, err := result(201, d)
 	if err != nil {
+		return Result{}, err
+	}
+	if err = ctx.Err(); err != nil {
 		return Result{}, err
 	}
 	if err = s.store.Create(ctx, d, meta.RequestID, fingerprint, res.Status, res.Body); err != nil {
@@ -200,6 +206,9 @@ func (s *Service) mutateWithBody(ctx context.Context, id string, meta Metadata, 
 	if err = validateMeta(meta, true); err != nil {
 		return Result{}, err
 	}
+	if err = ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	d, err := s.store.Get(ctx, id)
 	if err != nil {
 		return Result{}, err
@@ -225,6 +234,9 @@ func (s *Service) mutateWithBody(ctx context.Context, id string, meta Metadata, 
 		res.Body, err = encode(d)
 	}
 	if err != nil {
+		return Result{}, err
+	}
+	if err = ctx.Err(); err != nil {
 		return Result{}, err
 	}
 	if err = s.store.Save(ctx, d, previous, meta.RequestID, fp, res.Status, res.Body); err != nil {
