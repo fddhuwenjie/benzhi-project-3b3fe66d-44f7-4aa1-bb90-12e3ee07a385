@@ -247,6 +247,7 @@ func (s *Service) mutateWithBody(ctx context.Context, id string, meta Metadata, 
 	if err = s.store.Save(ctx, d, previous, meta.RequestID, fp, res.Status, res.Body); err != nil {
 		return Result{}, err
 	}
+	s.candidateDigests.invalidate(id)
 	return res, nil
 }
 

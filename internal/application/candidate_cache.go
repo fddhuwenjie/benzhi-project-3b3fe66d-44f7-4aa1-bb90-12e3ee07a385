@@ -27,3 +27,13 @@ func (c *candidateDigestCache) digest(dossierID string, calculate func() (string
 	c.mu.Unlock()
 	return digest, nil
 }
+
+// invalidate drops the cached candidate digest for a dossier so the next read
+// recomputes it from the current candidate text. It must be called whenever a
+// dossier is mutated, otherwise Get could surface a stale digest from a prior
+// remediation round and cause confirmation digest mismatches.
+func (c *candidateDigestCache) invalidate(dossierID string) {
+	c.mu.Lock()
+	delete(c.values, dossierID)
+	c.mu.Unlock()
+}
