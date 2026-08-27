@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>口述史脱敏发布资格工作台</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="mark">OA</span><h1>口述史发布资格工作台</h1></div>
+    <div class="top-actions"><label>当前档案<select id="dossierPicker"><option value="">尚未选择</option></select></label><button id="refreshBtn" class="icon" title="刷新">↻</button></div>
+  </header>
+  <main>
+    <section id="notice" class="notice" hidden></section>
+    <section class="queue-band">
+      <form id="queueForm" class="queue-filters">
+        <label>状态<select name="status"><option value="">全部状态</option><option value="draft">草稿</option><option value="consent_locked">授权已锁定</option><option value="transcript_frozen">转写已冻结</option><option value="remediation">定向整改</option><option value="awaiting_confirmation">待确认</option><option value="awaiting_review">待复核</option><option value="sealed">已封存</option></select></label>
+        <label>整理员<input name="editor_id"></label><label>关键词<input name="keyword" placeholder="档案编号或受访者代号"></label>
+        <label>更新起始<input type="datetime-local" name="updated_from"></label><label>更新结束<input type="datetime-local" name="updated_to"></label>
+        <button type="submit">筛选</button><button type="button" id="nextPageBtn" class="secondary" disabled>下一页</button>
+      </form>
+      <div id="queueStats" class="queue-stats"></div>
+    </section>
+    <section class="status-band">
+      <div><span class="eyebrow">档案状态</span><strong id="statusLabel">尚未建档</strong></div>
+      <ol id="steps" class="steps"><li>授权</li><li>转写</li><li>检查整改</li><li>确认</li><li>复核封存</li></ol>
+      <div class="revision">REV <b id="revision">-</b></div>
+    </section>
+
+    <section id="createPanel" class="panel">
+      <div class="section-title"><div><span class="eyebrow">新建记录</span><h2>访谈档案与授权证据</h2></div></div>
+      <form id="createForm" class="form-grid">
+        <label>档案编号<input name="dossier_id" required placeholder="OH-2026-001"></label>
+        <label>受访者代号<input name="subject_code" required placeholder="S-017"></label>
+        <label class="wide">录音引用<input name="audio_ref" required placeholder="vault://audio/interview-001.wav"></label>
+        <label class="wide">录音 SHA-256<input name="audio_sha256" required minlength="64" maxlength="64"></label>
+        <label>访谈日期<input name="interviewed_at" type="date" required></label>
+        <label>公开期限<input name="embargo_until" type="date"></label>
+        <label>授权用途<input name="allowed_uses" required placeholder="research,exhibition"></label>
+        <label>整理员 ID<input name="editor_id" required></label>
+        <label class="wide">授权证据 SHA-256<input name="consent_evidence_digest" required minlength="64" maxlength="64"></label>
+        <div class="actions wide"><button type="submit">建立档案</button></div>
+      </form>
+    </section>
+
+    <section id="workspace" hidden>
+      <nav class="tabs" aria-label="工作区域">
+        <button class="active" data-tab="transcript">转写与检查</button><button data-tab="confirmation">确认与复核</button><button data-tab="package">发布包校验</button><button data-tab="audit">审计记录</button>
+      </nav>
+      <div id="transcript" class="tabview">
+        <section class="panel"><div class="section-title"><div><span class="eyebrow">授权基线</span><h2 id="subjectTitle">-</h2><p id="consentSummary"></p></div><div class="actions"><button id="editConsentBtn" class="secondary">编辑授权</button><button id="lockConsentBtn">锁定授权基线</button></div></div><form id="consentEditForm" class="form-grid inset" hidden><label>受访者代号<input name="subject_code" required></label><label>访谈日期<input name="interviewed_at" type="date" required></label><label class="wide">录音引用<input name="audio_ref" required></label><label class="wide">录音 SHA-256<input name="audio_sha256" minlength="64" maxlength="64" required></label><label>授权用途<input name="allowed_uses" required></label><label>公开期限<input name="embargo_until" type="date"></label><label class="wide">授权证据 SHA-256<input name="consent_evidence_digest" minlength="64" maxlength="64" required></label><div class="actions wide"><button type="submit">保存修订</button></div></form><div id="consentDiffs" class="history-strip"></div></section>
+        <section class="panel">
+          <div class="section-title"><div><span class="eyebrow">时间码基线</span><h2>逐段转写</h2></div><div class="actions"><button id="addSegmentBtn" class="secondary">新增片段</button><button id="precheckBtn" class="secondary">时间轴预检</button><button id="saveTranscriptBtn">保存变更</button><button id="freezeBtn">冻结基线</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>序号</th><th>起始毫秒</th><th>结束毫秒</th><th>说话人</th><th>正文</th><th></th></tr></thead><tbody id="segmentsBody"></tbody></table></div>
+          <div id="emptySegments" class="empty">暂无转写片段</div>
+          <div id="precheckResult" class="result-strip" hidden></div>
+        </section>
+        <section class="panel">
+          <div class="section-title"><div><span class="eyebrow">确定性规则</span><h2>资格问题队列</h2></div><div class="actions"><button id="checkBtn">运行资格检查</button><button id="resolveBatchBtn" class="secondary">批量保存遮蔽</button></div></div>
+          <div id="issues" class="issue-list"></div><div id="emptyIssues" class="empty">冻结转写后运行检查</div>
+        </section>
+      </div>
+      <div id="confirmation" class="tabview" hidden>
+        <div class="columns">
+          <section class="panel"><span class="eyebrow">受访者决定</span><h2>候选稿确认</h2><p class="digest">候选摘要 <code id="candidateDigest">-</code></p><form id="confirmationForm" class="stack"><label>确认结论<select name="decision"><option value="approved">同意公开</option><option value="rejected">拒绝并整改</option></select></label><label>确认人<input name="confirmed_by" required></label><label>证据 SHA-256<input name="evidence_digest" required minlength="64" maxlength="64"></label><div><div class="mini-title">允许公开的例外范围 <button type="button" id="addExceptionBtn" class="compact secondary">新增</button></div><div id="exceptionRows" class="exception-list"></div></div><label>拒绝关联问题 ID<input name="rejection_issue_ids" placeholder="拒绝时填写，多个 ID 用逗号分隔"></label><label>备注<textarea name="note"></textarea></label><button type="submit">提交确认</button></form><div id="confirmationHistory" class="history-list"></div></section>
+          <section class="panel"><span class="eyebrow">角色分离</span><h2>独立复核</h2><form id="reviewForm" class="stack"><label>复核结论<select name="decision"><option value="approved">批准并封存</option><option value="rejected">驳回指定问题</option></select></label><label>复核员 ID<input name="reviewer_id" required></label><div id="reviewChecklist" class="checklist"></div><label>驳回问题 ID<input name="issue_ids" placeholder="多个 ID 用逗号分隔"></label><label>复核理由<textarea name="reason"></textarea></label><button type="submit">提交复核</button></form><div id="roundHistory" class="history-list"></div></section>
+        </div>
+      </div>
+      <div id="package" class="tabview" hidden><section class="panel"><div class="section-title"><div><span class="eyebrow">不可变材料</span><h2>发布包一致性</h2></div><button id="verifyPackageBtn">重新校验</button></div><div id="packageView" class="empty">批准后显示发布包校验结果</div><div id="verificationRows" class="verification-list"></div></section></div>
+      <div id="audit" class="tabview" hidden><section class="panel"><span class="eyebrow">摘要链</span><h2>审计时间线</h2><ol id="auditList" class="timeline"></ol></section></div>
+    </section>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
